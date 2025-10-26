@@ -1,12 +1,8 @@
 name: Build wheels
 
 on:
-  # on new tag
   push:
-    tags:
-      - "*"
-
-  # manually trigger
+    tags: ["*"]
   workflow_dispatch:
 
 jobs:
@@ -18,26 +14,31 @@ jobs:
         os: [windows-2022, macos-13]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4   # 升新版，非必要但建議
 
-      - name: Set MacOS compiler
+      # macOS：安裝 OpenMP 並設定編譯器
+      - name: Set up toolchain on macOS
         if: runner.os == 'macOS'
         run: |
-          brew install gcc@13;
+          brew install libomp gcc@13
+          echo "CC=gcc-13"  >> $GITHUB_ENV
+          echo "CXX=gcc-13" >> $GITHUB_ENV
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.1
         env:
-          # FIX 1: Use 'pypy*' instead of 'pp*'
-          CIBW_SKIP: pypy* *win32*
-          
-          # FIX 2: Use CIBW_ENVIRONMENT_MACOS to set the compiler
-          CIBW_ENVIRONMENT_MACOS: 'CC=gcc-13 CXX=gcc-13'
+          # 明確指定要建的 Python 版本（你要支援到 3.13）
+          CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
+          # 跳過 32 位 Windows；PyPy 不必再特別 skip
+          CIBW_SKIP: "*win32*"
+          # 傳遞編譯器設定（macOS 才會有值）
+          CC:  ${{ env.CC }}
+          CXX: ${{ env.CXX }}
         with:
           package-dir: ./python
           output-dir: ./python/wheelhouse
 
-      - name: Upload a Build Artifact
+      - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
