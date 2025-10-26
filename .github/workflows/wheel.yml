@@ -1,8 +1,12 @@
 name: Build wheels
 
 on:
+  # on new tag
   push:
-    tags: ["*"]
+    tags:
+      - "*"
+
+  # manually trigger
   workflow_dispatch:
 
 jobs:
@@ -16,38 +20,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # macOS：裝 OpenMP 兩個來源，並設定編譯器
-      - name: Set up toolchain on macOS
+      - name: Set MacOS compiler and library path
         if: runner.os == 'macOS'
         run: |
-          brew install libomp gcc@13
-          echo "CC=gcc-13"  >> $GITHUB_ENV
-          echo "CXX=gcc-13" >> $GITHUB_ENV
-          # 供 delocate 搜尋用的兩個路徑
-          echo "LIBOMP_DIR=$(brew --prefix libomp)/lib"         >> $GITHUB_ENV
-          echo "LIBGOMP_DIR=$(brew --prefix gcc@13)/lib/gcc/13" >> $GITHUB_ENV
+          brew install gcc@13
+          # This is the *correct* path to the OpenMP library (libgomp.dylib)
+          # We export it to the GitHub Actions environment
+          GCC_LIB_PATH="$(brew --prefix gcc@13)/lib/gcc/13"
+          echo "GCC_LIB_PATH=${GCC_LIB_PATH}" >> $GITHUB_ENV
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.1
         env:
-          # 明確指定要建的 Python 版本
-          CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
-          CIBW_SKIP: "*win32*"
-          # 傳遞編譯器設定（僅 macOS 會有值）
-          CC:  ${{ env.CC }}
-          CXX: ${{ env.CXX }}
-          # 把 lib 路徑提供給 delocate 當搜尋路徑（-L）
-          CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
-            delocate-listdeps {wheel} &&
-            delocate-wheel -L "${LIBOMP_DIR}" -L "${LIBGOMP_DIR}" -w {dest_dir} {wheel}
-          # 也把 DYLD_LIBRARY_PATH 帶上，保險
-          CIBW_ENVIRONMENT_MACOS: >
-            DYLD_LIBRARY_PATH="${LIBOMP_DIR}:${LIBGOMP_DIR}"
+          # FIX 1: Remove 'pypy*' (was 'pp*'). It's no longer needed.
+          CIBW_SKIP: '*win32*'
+          
+          # FIX 2: Pass both the compiler AND the library path into the
+          # isolated build environment for both compile and repair.
+          CIBW_ENVIRONMENT_MACOS: 'CC=gcc-13 CXX=gcc-13 DYLD_LIBRARY_PATH=${{ env.GCC_LIB_PATH }}'
         with:
           package-dir: ./python
           output-dir: ./python/wheelhouse
 
-      - name: Upload wheels
+      - name: Upload a Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
