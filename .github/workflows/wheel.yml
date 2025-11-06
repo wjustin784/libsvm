@@ -1,8 +1,12 @@
 name: Build wheels
 
 on:
+  # on new tag
   push:
-    tags: ["*"]
+    tags:
+      - "*"
+
+  # manually trigger
   workflow_dispatch:
 
 jobs:
@@ -14,21 +18,28 @@ jobs:
         os: [windows-2022, macos-13]
 
     steps:
-      - uses: actions/checkout@v4  # 升級比較穩
+      - uses: actions/checkout@v2
 
-      # 刪掉強制 GCC 的步驟，改用預設 Clang
+      - name: Set MacOS compiler
+        if: runner.os == 'macOS'
+        run: |
+          brew install gcc@13;
+          echo "CXX=gcc-13" >> $GITHUB_ENV
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.2  # 版本號你已經換了，保持 v3 即可
+        uses: pypa/cibuildwheel@v2.10.2
         env:
-          # 不啟用 PyPy，就不要 skip 它；保留你真的要 skip 的
-          CIBW_SKIP: "*win32*"
+          # don't build for PyPython and windows 32-bit
+          CIBW_SKIP: pp* *win32*
+          # force compiler on macOS
+          CXX: ${{ env.CXX }}
+          CC: ${{ env.CXX }}
         with:
           package-dir: ./python
           output-dir: ./python/wheelhouse
 
-      - name: Upload wheels
+      - name: Upload a Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
-          path: ./python/wheelhouse/*.whl
+          path: ./python/wheelhouse
