@@ -1,12 +1,8 @@
 name: Build wheels
 
 on:
-  # on new tag
   push:
-    tags:
-      - "*"
-
-  # manually trigger
+    tags: ["*"]
   workflow_dispatch:
 
 jobs:
@@ -18,32 +14,21 @@ jobs:
         os: [windows-2022, macos-13]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4  # 升級比較穩
 
-      - name: Set MacOS compiler and library path
-        if: runner.os == 'macOS'
-        run: |
-          brew install gcc@13
-          # This is the *correct* path to the OpenMP library (libgomp.dylib)
-          # We export it to the GitHub Actions environment
-          GCC_LIB_PATH="$(brew --prefix gcc@13)/lib/gcc/13"
-          echo "GCC_LIB_PATH=${GCC_LIB_PATH}" >> $GITHUB_ENV
+      # 刪掉強制 GCC 的步驟，改用預設 Clang
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.2.1
+        uses: pypa/cibuildwheel@v3.2  # 版本號你已經換了，保持 v3 即可
         env:
-          # FIX 1: Remove 'pypy*' (was 'pp*'). It's no longer needed.
-          CIBW_SKIP: '*win32*'
-          
-          # FIX 2: Pass both the compiler AND the library path into the
-          # isolated build environment for both compile and repair.
-          CIBW_ENVIRONMENT_MACOS: 'CC=gcc-13 CXX=gcc-13 DYLD_LIBRARY_PATH=${{ env.GCC_LIB_PATH }}'
+          # 不啟用 PyPy，就不要 skip 它；保留你真的要 skip 的
+          CIBW_SKIP: "*win32*"
         with:
           package-dir: ./python
           output-dir: ./python/wheelhouse
 
-      - name: Upload a Build Artifact
+      - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
-          path: ./python/wheelhouse
+          path: ./python/wheelhouse/*.whl
