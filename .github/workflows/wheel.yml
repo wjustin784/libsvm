@@ -2,8 +2,7 @@ name: Build wheels
 
 on:
   push:
-    tags:
-      - "*"
+    tags: ["*"]
   workflow_dispatch:
 
 jobs:
@@ -15,38 +14,15 @@ jobs:
         os: [windows-2022, macos-13]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4  # 升級比較穩
 
-      # macOS: use Apple Clang + llvm-openmp (libomp)
-      - name: Set macOS compiler (Apple Clang + llvm-openmp)
-        if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install llvm libomp
-          LLVM_PREFIX="$(brew --prefix llvm)"
-          OMP_PREFIX="$(brew --prefix libomp || echo "$LLVM_PREFIX")"
-          echo "CC=clang" >> $GITHUB_ENV
-          echo "CXX=clang++" >> $GITHUB_ENV
-          echo "CPPFLAGS=-I${OMP_PREFIX}/include -I${LLVM_PREFIX}/include" >> $GITHUB_ENV
-          echo "CFLAGS=-I${OMP_PREFIX}/include -I${LLVM_PREFIX}/include" >> $GITHUB_ENV
-          echo "LDFLAGS=-L${OMP_PREFIX}/lib -L${LLVM_PREFIX}/lib" >> $GITHUB_ENV
-          echo "DYLD_FALLBACK_LIBRARY_PATH=${OMP_PREFIX}/lib:${LLVM_PREFIX}/lib" >> $GITHUB_ENV
-          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
+      # 刪掉強制 GCC 的步驟，改用預設 Clang
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.10.2
+        uses: pypa/cibuildwheel@v3.2  # 版本號你已經換了，保持 v3 即可
         env:
-          # Skip PyPy and Win32
-          CIBW_SKIP: pp* *win32*
-          # Pass compiler and paths (macOS step populates these)
-          CC: ${{ env.CC }}
-          CXX: ${{ env.CXX }}
-          CFLAGS: ${{ env.CFLAGS }}
-          CPPFLAGS: ${{ env.CPPFLAGS }}
-          LDFLAGS: ${{ env.LDFLAGS }}
-          MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
-          # Show and repair macOS wheel deps (delocate)
-          CIBW_REPAIR_WHEEL_COMMAND_MACOS: "delocate-listdeps {wheel} && delocate-wheel -w {dest_dir} -v {wheel}"
+          # 不啟用 PyPy，就不要 skip 它；保留你真的要 skip 的
+          CIBW_SKIP: "*win32*"
         with:
           package-dir: ./python
           output-dir: ./python/wheelhouse
@@ -55,4 +31,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
-          path: ./python/wheelhouse
+          path: ./python/wheelhouse/*.whl
