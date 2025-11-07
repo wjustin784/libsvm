@@ -1,12 +1,9 @@
 name: Build wheels
 
 on:
-  # on new tag
   push:
     tags:
       - "*"
-
-  # manually trigger
   workflow_dispatch:
 
 jobs:
@@ -18,27 +15,43 @@ jobs:
         os: [windows-2022, macos-13]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - name: Set MacOS compiler
+      # macOS: use Apple Clang + llvm-openmp (libomp)
+      - name: Set macOS compiler (Apple Clang + llvm-openmp)
         if: runner.os == 'macOS'
         run: |
-          brew install gcc@13;
-          echo "CXX=gcc-13" >> $GITHUB_ENV
+          brew update
+          brew install llvm libomp
+          LLVM_PREFIX="$(brew --prefix llvm)"
+          OMP_PREFIX="$(brew --prefix libomp || echo "$LLVM_PREFIX")"
+          echo "CC=clang" >> $GITHUB_ENV
+          echo "CXX=clang++" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I${OMP_PREFIX}/include -I${LLVM_PREFIX}/include" >> $GITHUB_ENV
+          echo "CFLAGS=-I${OMP_PREFIX}/include -I${LLVM_PREFIX}/include" >> $GITHUB_ENV
+          echo "LDFLAGS=-L${OMP_PREFIX}/lib -L${LLVM_PREFIX}/lib" >> $GITHUB_ENV
+          echo "DYLD_FALLBACK_LIBRARY_PATH=${OMP_PREFIX}/lib:${LLVM_PREFIX}/lib" >> $GITHUB_ENV
+          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.10.2
         env:
-          # don't build for PyPython and windows 32-bit
+          # Skip PyPy and Win32
           CIBW_SKIP: pp* *win32*
-          # force compiler on macOS
+          # Pass compiler and paths (macOS step populates these)
+          CC: ${{ env.CC }}
           CXX: ${{ env.CXX }}
-          CC: ${{ env.CXX }}
+          CFLAGS: ${{ env.CFLAGS }}
+          CPPFLAGS: ${{ env.CPPFLAGS }}
+          LDFLAGS: ${{ env.LDFLAGS }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
+          # Show and repair macOS wheel deps (delocate)
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: "delocate-listdeps {wheel} && delocate-wheel -w {dest_dir} -v {wheel}"
         with:
           package-dir: ./python
           output-dir: ./python/wheelhouse
 
-      - name: Upload a Build Artifact
+      - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}

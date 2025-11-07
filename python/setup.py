@@ -51,13 +51,30 @@ if sys.platform == "win32":
             "extra_compile_args": ["/openmp"],
         }
     )
+if sys.platform == "darwin":
+    # macOS + Apple Clang 走 libomp：
+    # 編譯用 -Xpreprocessor -fopenmp；連結用 -lomp
+    kwargs_for_extension.update(
+        {
+            "extra_compile_args": ["-Xpreprocessor", "-fopenmp"],
+            "extra_link_args": ["-lomp"],
+        }
+    )
 else:
+    # 其他（例如 Linux 用 GCC/Clang + libgomp）
     kwargs_for_extension.update(
         {
             "extra_compile_args": ["-fopenmp"],
             "extra_link_args": ["-fopenmp"],
         }
     )
+# else:
+#     kwargs_for_extension.update(
+#         {
+#             "extra_compile_args": ["-fopenmp"],
+#             "extra_link_args": ["-fopenmp"],
+#         }
+#     )
 
 
 def create_cpp_source():
