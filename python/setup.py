@@ -51,7 +51,7 @@ if sys.platform == "win32":
             "extra_compile_args": ["/openmp"],
         }
     )
-if sys.platform == "darwin":
+elif sys.platform == "darwin":
     # macOS + Apple Clang 走 libomp：
     # 編譯用 -Xpreprocessor -fopenmp；連結用 -lomp
     kwargs_for_extension.update(

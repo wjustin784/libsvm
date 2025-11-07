@@ -14,15 +14,32 @@ jobs:
         os: [windows-2022, macos-13]
 
     steps:
-      - uses: actions/checkout@v4  # 升級比較穩
+      - uses: actions/checkout@v4
 
-      # 刪掉強制 GCC 的步驟，改用預設 Clang
+      # macOS: 安裝 libomp，並把 prefix 設成環境變數供後續使用
+      - name: Install libomp (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install libomp
+          echo "OMP_PREFIX=$(brew --prefix libomp)" >> $GITHUB_ENV
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.2  # 版本號你已經換了，保持 v3 即可
+        uses: pypa/cibuildwheel@v3.2
         env:
-          # 不啟用 PyPy，就不要 skip 它；保留你真的要 skip 的
+          # 不建 32-bit Windows
           CIBW_SKIP: "*win32*"
+          # 把編譯所需的旗標傳入「macOS 的 build 階段」（cibuildwheel v3 隔離環境）
+          CIBW_ENVIRONMENT_MACOS: >
+            CC=clang
+            CXX=clang++
+            CPPFLAGS="-I${OMP_PREFIX}/include"
+            CFLAGS="-I${OMP_PREFIX}/include"
+            LDFLAGS="-L${OMP_PREFIX}/lib"
+          # 修復 macOS wheel 依賴，把 libomp.dylib 打包進去
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
+            delocate-listdeps {wheel} &&
+            delocate-wheel -w {dest_dir} -v {wheel}
         with:
           package-dir: ./python
           output-dir: ./python/wheelhouse
