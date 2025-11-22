@@ -1,9 +1,13 @@
 name: Build wheels
 
 on:
+  # on new tag
   push:
-    tags: ["*"]        # 發 tag 時觸發
-  workflow_dispatch:    # 手動觸發
+    tags:
+      - "*"
+
+  # manually trigger
+  workflow_dispatch:
 
 jobs:
   build_wheels:
@@ -11,41 +15,35 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        # macos-13 是 Intel 架構 (x86_64)，如果未來需要 Apple Silicon (M1/M2) 需增加 macos-14
         os: [windows-2022, macos-13]
 
     steps:
       - uses: actions/checkout@v4
 
-      # macOS：只安裝 libomp，提供 omp.h 與 libomp.dylib
-      - name: Install libomp (macOS)
+      - name: Set MacOS compiler
         if: runner.os == 'macOS'
         run: |
-          brew update
-          brew install libomp
-          echo "OMP_PREFIX=$(brew --prefix libomp)" >> $GITHUB_ENV
+          brew install gcc@13;
+          echo "CXX=gcc-13" >> $GITHUB_ENV
+          echo "CC=gcc-13" >> $GITHUB_ENV
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.2
+        uses: pypa/cibuildwheel@v2.21.3
         env:
-          # 不建 32-bit Windows
-          CIBW_SKIP: "*win32*"
-          # 將編譯/連結需要的路徑傳入 macOS 的隔離建置環境
-          CIBW_ENVIRONMENT_MACOS: >
-            CC=clang
-            CXX=clang++
-            CPPFLAGS="-I${OMP_PREFIX}/include"
-            CFLAGS="-I${OMP_PREFIX}/include"
-            LDFLAGS="-L${OMP_PREFIX}/lib"
-          # 修 wheel 依賴並將 libomp.dylib 內嵌進 wheel
-          CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
-            delocate-listdeps {wheel} &&
-            delocate-wheel -w {dest_dir} -v {wheel}
+          # 預設會 build 所有的 CPython 版本 (包括 3.12, 3.13)
+          # 略過 PyPy 和 Windows 32-bit
+          CIBW_SKIP: pp* *win32*
+          
+          # macOS 上強制使用 GCC (因 setup.py 依賴 -fopenmp)
+          CXX: ${{ env.CXX }}
+          CC: ${{ env.CC }}
         with:
           package-dir: ./python
           output-dir: ./python/wheelhouse
 
-      - name: Upload wheels
+      - name: Upload a Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
-          path: ./python/wheelhouse/*.whl
+          path: ./python/wheelhouse

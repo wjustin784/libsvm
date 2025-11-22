@@ -5,14 +5,11 @@ from os import path
 from shutil import copyfile, rmtree
 from glob import glob
 
-from setuptools import setup, Extension
-from distutils.command.clean import clean as clean_cmd
+from setuptools import setup, Extension, Command
+from setuptools.command.build_ext import build_ext
 
-# a technique to build a shared library on windows
-from distutils.command.build_ext import build_ext
-
+# Patch build_ext to avoid export symbols issue on Windows (legacy hack)
 build_ext.get_export_symbols = lambda x, y: []
-
 
 PACKAGE_DIR = "libsvm"
 PACKAGE_NAME = "libsvm-official"
@@ -51,44 +48,34 @@ if sys.platform == "win32":
             "extra_compile_args": ["/openmp"],
         }
     )
-elif sys.platform == "darwin":
-    # macOS + Apple Clang 走 libomp：
-    # 編譯用 -Xpreprocessor -fopenmp；連結用 -lomp
-    kwargs_for_extension.update(
-        {
-            "extra_compile_args": ["-Xpreprocessor", "-fopenmp"],
-            "extra_link_args": ["-lomp"],
-        }
-    )
 else:
-    # 其他（例如 Linux 用 GCC/Clang + libgomp）
     kwargs_for_extension.update(
         {
             "extra_compile_args": ["-fopenmp"],
             "extra_link_args": ["-fopenmp"],
         }
     )
-# else:
-#     kwargs_for_extension.update(
-#         {
-#             "extra_compile_args": ["-fopenmp"],
-#             "extra_link_args": ["-fopenmp"],
-#         }
-#     )
 
 
 def create_cpp_source():
     for f in source_codes + headers:
         src_file = path.join("..", f)
         tgt_file = path.join(cpp_dir, f)
-        # ensure blas directory is created
+        # ensure directory is created
         os.makedirs(path.dirname(tgt_file), exist_ok=True)
-        copyfile(src_file, tgt_file)
+        if path.exists(src_file):
+            copyfile(src_file, tgt_file)
 
-
-class CleanCommand(clean_cmd):
+# 改寫 CleanCommand，繼承自 setuptools.Command 而非 distutils
+class CleanCommand(Command):
+    user_options = []
+    def initialize_options(self):
+        pass
+    def finalize_options(self):
+        pass
+    
     def run(self):
-        clean_cmd.run(self)
+        # 移除舊的 build/dist 資料夾
         to_be_removed = ["build/", "dist/", "MANIFEST", cpp_dir, "{}.egg-info".format(PACKAGE_NAME), license_file]
         to_be_removed += glob("./{}/{}.*".format(PACKAGE_DIR, dynamic_lib_name))
         for root, dirs, files in os.walk(os.curdir, topdown=False):
@@ -109,11 +96,13 @@ def main():
     if not path.exists(cpp_dir):
         create_cpp_source()
 
-    if not path.exists(license_file):
+    if not path.exists(license_file) and path.exists(license_source):
         copyfile(license_source, license_file)
 
-    with open("README") as f:
-        long_description = f.read()
+    long_description = ""
+    if path.exists("README"):
+        with open("README") as f:
+            long_description = f.read()
 
     setup(
         name=PACKAGE_NAME,
@@ -137,4 +126,3 @@ def main():
 
 
 main()
-
