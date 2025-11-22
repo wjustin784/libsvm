@@ -35,6 +35,11 @@ jobs:
           # 略過 PyPy 和 Windows 32-bit
           CIBW_SKIP: pp* *win32*
           
+          CIBW_ENVIRONMENT_MACOS: >
+                      MACOSX_DEPLOYMENT_TARGET=13.0
+                      CXX=gcc-13
+                      CC=gcc-13
+          
           # macOS 上強制使用 GCC (因 setup.py 依賴 -fopenmp)
           CXX: ${{ env.CXX }}
           CC: ${{ env.CC }}
